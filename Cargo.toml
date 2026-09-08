@@ -1,0 +1,10 @@
+[package]
+name = "flagq"
+version = "0.1.0"
+edition = "2021"
+description = "Query a feature-flags file: is this flag on for this context, and why."
+license = "MIT"
+
+[[bin]]
+name = "flagq"
+path = "src/main.rs"
