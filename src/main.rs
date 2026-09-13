@@ -4,7 +4,7 @@ mod parser;
 
 use error::suggest;
 use lexer::Lexer;
-use parser::{Flag, Parser, Rule};
+use parser::{Condition, Flag, Parser, Rule};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -94,7 +94,8 @@ fn warn_on_unknown_keys(flag: &Flag, context: &HashMap<String, String>) {
     let known: Vec<&str> = flag
         .rules
         .iter()
-        .flat_map(|r| r.conditions.iter().map(|c| c.key.as_str()))
+        .flat_map(|r| r.clauses.iter())
+        .flat_map(|group| group.iter().map(|c| c.key.as_str()))
         .collect();
     for key in context.keys() {
         if !known.contains(&key.as_str()) {
@@ -128,18 +129,37 @@ fn evaluate(flag: &Flag, context: &HashMap<String, String>) -> (bool, String) {
 }
 
 fn rule_matches(rule: &Rule, context: &HashMap<String, String>) -> bool {
-    rule.conditions.iter().all(|cond| {
-        context
-            .get(&cond.key)
-            .map(|v| v == &cond.value)
-            .unwrap_or(false)
+    rule.clauses.iter().any(|group| {
+        group.iter().all(|cond| {
+            let equal = context
+                .get(&cond.key)
+                .map(|v| v == &cond.value)
+                .unwrap_or(false);
+            equal != cond.negate
+        })
     })
 }
 
+fn describe_condition(c: &Condition) -> String {
+    format!("{} {} \"{}\"", c.key, if c.negate { "!=" } else { "=" }, c.value)
+}
+
 fn describe_conditions(rule: &Rule) -> String {
-    rule.conditions
+    let multiple_clauses = rule.clauses.len() > 1;
+    rule.clauses
         .iter()
-        .map(|c| format!("{} = \"{}\"", c.key, c.value))
+        .map(|group| {
+            let joined = group
+                .iter()
+                .map(describe_condition)
+                .collect::<Vec<_>>()
+                .join(" and ");
+            if multiple_clauses && group.len() > 1 {
+                format!("({})", joined)
+            } else {
+                joined
+            }
+        })
         .collect::<Vec<_>>()
-        .join(" and ")
+        .join(" or ")
 }

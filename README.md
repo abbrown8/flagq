@@ -23,12 +23,24 @@ flag dark-mode {
     default: on
     rule: off if legacy_browser = "true"
 }
+
+flag new-checkout {
+    default: off
+    rule: on if plan = "pro" or plan = "team"
+    rule: on if country = "us" and beta != "false"
+}
 ```
 
 Each flag has a default and an ordered list of rules. Rules are checked
 top to bottom; the first one whose conditions all match wins. If nothing
 matches, the flag falls back to its default. Values are compared as plain
 strings, so `beta = "true"` matches a context where you pass `beta=true`.
+
+A rule's conditions can be joined with `and` and `or`, and `and` binds
+tighter than `or`, the same as in most languages: `a = "1" and b = "2" or
+c = "3"` means `(a = "1" and b = "2") or c = "3"`. Conditions can also be
+negated with `!=`, which matches when the key is absent from the context
+or holds a different value.
 
 ## Usage
 
@@ -81,6 +93,5 @@ cargo build --release
 
 ## Status
 
-Early. The grammar covers equality conditions ANDed together, which
-handles the common cases but not `or`, negation, or numeric comparisons
-yet.
+Early. The grammar covers equality and inequality conditions joined with
+`and` / `or`, but not numeric comparisons or percentage rollouts yet.

@@ -8,6 +8,7 @@ pub enum TokenKind {
     RBrace,
     Colon,
     Equal,
+    NotEqual,
     Eof,
 }
 
@@ -27,6 +28,7 @@ impl TokenKind {
             TokenKind::RBrace => "`}`".to_string(),
             TokenKind::Colon => "`:`".to_string(),
             TokenKind::Equal => "`=`".to_string(),
+            TokenKind::NotEqual => "`!=`".to_string(),
             TokenKind::Eof => "end of file".to_string(),
         }
     }
@@ -118,6 +120,19 @@ impl Lexer {
                 '=' => {
                     self.advance();
                     TokenKind::Equal
+                }
+                '!' => {
+                    self.advance();
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::NotEqual
+                    } else {
+                        return Err(SourceError::new(
+                            line,
+                            col,
+                            "expected `=` after `!`",
+                        ));
+                    }
                 }
                 '"' => self.read_string(line, col)?,
                 c if is_ident_char(c) => self.read_ident(),

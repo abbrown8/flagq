@@ -8,16 +8,20 @@ pub struct Flag {
     pub rules: Vec<Rule>,
 }
 
+/// A rule matches if any clause matches; a clause matches if all of its
+/// conditions match. This is `or` of `and`s, so `or` reads as lower
+/// precedence than `and` the way it does in most languages.
 #[derive(Debug)]
 pub struct Rule {
     pub effect: bool,
-    pub conditions: Vec<Condition>,
+    pub clauses: Vec<Vec<Condition>>,
 }
 
 #[derive(Debug)]
 pub struct Condition {
     pub key: String,
     pub value: String,
+    pub negate: bool,
 }
 
 pub struct Parser {
@@ -115,15 +119,32 @@ impl Parser {
                 ))
             }
         };
-        self.expect(&TokenKind::Equal, "after context key")?;
+        let negate = match &self.peek().kind {
+            TokenKind::Equal => {
+                self.advance();
+                false
+            }
+            TokenKind::NotEqual => {
+                self.advance();
+                true
+            }
+            _ => {
+                let tok = self.peek();
+                return Err(SourceError::new(
+                    tok.line,
+                    tok.col,
+                    format!(
+                        "expected `=` or `!=` after context key, found {}",
+                        tok.kind.describe()
+                    ),
+                ));
+            }
+        };
         let value = self.parse_value()?;
-        Ok(Condition { key, value })
+        Ok(Condition { key, value, negate })
     }
 
-    fn parse_rule(&mut self) -> Result<Rule, SourceError> {
-        self.expect(&TokenKind::Colon, "after `rule`")?;
-        let effect = self.parse_bool_word()?;
-        self.expect_ident("if")?;
+    fn parse_and_group(&mut self) -> Result<Vec<Condition>, SourceError> {
         let mut conditions = vec![self.parse_condition()?];
         loop {
             match &self.peek().kind {
@@ -134,7 +155,24 @@ impl Parser {
                 _ => break,
             }
         }
-        Ok(Rule { effect, conditions })
+        Ok(conditions)
+    }
+
+    fn parse_rule(&mut self) -> Result<Rule, SourceError> {
+        self.expect(&TokenKind::Colon, "after `rule`")?;
+        let effect = self.parse_bool_word()?;
+        self.expect_ident("if")?;
+        let mut clauses = vec![self.parse_and_group()?];
+        loop {
+            match &self.peek().kind {
+                TokenKind::Ident(s) if s == "or" => {
+                    self.advance();
+                    clauses.push(self.parse_and_group()?);
+                }
+                _ => break,
+            }
+        }
+        Ok(Rule { effect, clauses })
     }
 
     fn parse_flag(&mut self) -> Result<Flag, SourceError> {
