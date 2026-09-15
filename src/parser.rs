@@ -17,11 +17,38 @@ pub struct Rule {
     pub clauses: Vec<Vec<Condition>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Operator {
+    Eq,
+    NotEq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl Operator {
+    pub fn symbol(&self) -> &'static str {
+        match self {
+            Operator::Eq => "=",
+            Operator::NotEq => "!=",
+            Operator::Lt => "<",
+            Operator::Le => "<=",
+            Operator::Gt => ">",
+            Operator::Ge => ">=",
+        }
+    }
+
+    fn is_numeric(&self) -> bool {
+        matches!(self, Operator::Lt | Operator::Le | Operator::Gt | Operator::Ge)
+    }
+}
+
 #[derive(Debug)]
 pub struct Condition {
     pub key: String,
     pub value: String,
-    pub negate: bool,
+    pub op: Operator,
 }
 
 pub struct Parser {
@@ -119,29 +146,40 @@ impl Parser {
                 ))
             }
         };
-        let negate = match &self.peek().kind {
-            TokenKind::Equal => {
-                self.advance();
-                false
-            }
-            TokenKind::NotEqual => {
-                self.advance();
-                true
-            }
+        let op = match &self.peek().kind {
+            TokenKind::Equal => Operator::Eq,
+            TokenKind::NotEqual => Operator::NotEq,
+            TokenKind::Lt => Operator::Lt,
+            TokenKind::Le => Operator::Le,
+            TokenKind::Gt => Operator::Gt,
+            TokenKind::Ge => Operator::Ge,
             _ => {
                 let tok = self.peek();
                 return Err(SourceError::new(
                     tok.line,
                     tok.col,
                     format!(
-                        "expected `=` or `!=` after context key, found {}",
+                        "expected `=`, `!=`, `<`, `<=`, `>` or `>=` after context key, found {}",
                         tok.kind.describe()
                     ),
                 ));
             }
         };
+        self.advance();
+        let value_tok = self.peek().clone();
         let value = self.parse_value()?;
-        Ok(Condition { key, value, negate })
+        if op.is_numeric() && value.parse::<f64>().is_err() {
+            return Err(SourceError::new(
+                value_tok.line,
+                value_tok.col,
+                format!(
+                    "expected a number after `{}`, found `{}`",
+                    op.symbol(),
+                    value
+                ),
+            ));
+        }
+        Ok(Condition { key, value, op })
     }
 
     fn parse_and_group(&mut self) -> Result<Vec<Condition>, SourceError> {

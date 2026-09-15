@@ -4,7 +4,7 @@ mod parser;
 
 use error::suggest;
 use lexer::Lexer;
-use parser::{Condition, Flag, Parser, Rule};
+use parser::{Condition, Flag, Operator, Parser, Rule};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -129,19 +129,35 @@ fn evaluate(flag: &Flag, context: &HashMap<String, String>) -> (bool, String) {
 }
 
 fn rule_matches(rule: &Rule, context: &HashMap<String, String>) -> bool {
-    rule.clauses.iter().any(|group| {
-        group.iter().all(|cond| {
-            let equal = context
-                .get(&cond.key)
-                .map(|v| v == &cond.value)
-                .unwrap_or(false);
-            equal != cond.negate
-        })
-    })
+    rule.clauses
+        .iter()
+        .any(|group| group.iter().all(|cond| condition_matches(cond, context)))
+}
+
+fn condition_matches(cond: &Condition, context: &HashMap<String, String>) -> bool {
+    match cond.op {
+        Operator::Eq => context.get(&cond.key).map(|v| v == &cond.value).unwrap_or(false),
+        Operator::NotEq => context.get(&cond.key).map(|v| v != &cond.value).unwrap_or(true),
+        Operator::Lt | Operator::Le | Operator::Gt | Operator::Ge => {
+            // The parser already rejected non-numeric rule values, so only the
+            // context side can fail to parse here.
+            let Some(Ok(actual)) = context.get(&cond.key).map(|v| v.parse::<f64>()) else {
+                return false;
+            };
+            let expected: f64 = cond.value.parse().expect("parser validated numeric value");
+            match cond.op {
+                Operator::Lt => actual < expected,
+                Operator::Le => actual <= expected,
+                Operator::Gt => actual > expected,
+                Operator::Ge => actual >= expected,
+                Operator::Eq | Operator::NotEq => unreachable!(),
+            }
+        }
+    }
 }
 
 fn describe_condition(c: &Condition) -> String {
-    format!("{} {} \"{}\"", c.key, if c.negate { "!=" } else { "=" }, c.value)
+    format!("{} {} \"{}\"", c.key, c.op.symbol(), c.value)
 }
 
 fn describe_conditions(rule: &Rule) -> String {

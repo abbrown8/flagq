@@ -42,6 +42,22 @@ c = "3"` means `(a = "1" and b = "2") or c = "3"`. Conditions can also be
 negated with `!=`, which matches when the key is absent from the context
 or holds a different value.
 
+A condition can also compare numerically with `<`, `<=`, `>`, or `>=`,
+for things like account age or a usage count:
+
+```
+flag high-volume {
+    default: off
+    rule: on if requests_per_day >= 1000
+}
+```
+
+The right-hand side of a numeric comparison has to parse as a number;
+`flagq` rejects the flags file at parse time if it doesn't. The
+left-hand side comes from the context passed on the command line, so if
+that value isn't a number (or the key is missing entirely) the condition
+just doesn't match, the same as a `=` condition on a missing key.
+
 ## Usage
 
 ```
@@ -93,5 +109,5 @@ cargo build --release
 
 ## Status
 
-Early. The grammar covers equality and inequality conditions joined with
-`and` / `or`, but not numeric comparisons or percentage rollouts yet.
+Early. The grammar covers equality, inequality, and numeric comparisons
+joined with `and` / `or`, but not percentage rollouts yet.

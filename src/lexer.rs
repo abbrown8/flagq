@@ -9,6 +9,10 @@ pub enum TokenKind {
     Colon,
     Equal,
     NotEqual,
+    Lt,
+    Le,
+    Gt,
+    Ge,
     Eof,
 }
 
@@ -29,6 +33,10 @@ impl TokenKind {
             TokenKind::Colon => "`:`".to_string(),
             TokenKind::Equal => "`=`".to_string(),
             TokenKind::NotEqual => "`!=`".to_string(),
+            TokenKind::Lt => "`<`".to_string(),
+            TokenKind::Le => "`<=`".to_string(),
+            TokenKind::Gt => "`>`".to_string(),
+            TokenKind::Ge => "`>=`".to_string(),
             TokenKind::Eof => "end of file".to_string(),
         }
     }
@@ -132,6 +140,24 @@ impl Lexer {
                             col,
                             "expected `=` after `!`",
                         ));
+                    }
+                }
+                '<' => {
+                    self.advance();
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::Le
+                    } else {
+                        TokenKind::Lt
+                    }
+                }
+                '>' => {
+                    self.advance();
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::Ge
+                    } else {
+                        TokenKind::Gt
                     }
                 }
                 '"' => self.read_string(line, col)?,
