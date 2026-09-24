@@ -13,6 +13,7 @@ pub enum TokenKind {
     Le,
     Gt,
     Ge,
+    Percent,
     Eof,
 }
 
@@ -37,6 +38,7 @@ impl TokenKind {
             TokenKind::Le => "`<=`".to_string(),
             TokenKind::Gt => "`>`".to_string(),
             TokenKind::Ge => "`>=`".to_string(),
+            TokenKind::Percent => "`%`".to_string(),
             TokenKind::Eof => "end of file".to_string(),
         }
     }
@@ -159,6 +161,10 @@ impl Lexer {
                     } else {
                         TokenKind::Gt
                     }
+                }
+                '%' => {
+                    self.advance();
+                    TokenKind::Percent
                 }
                 '"' => self.read_string(line, col)?,
                 c if is_ident_char(c) => self.read_ident(),

@@ -58,6 +58,21 @@ left-hand side comes from the context passed on the command line, so if
 that value isn't a number (or the key is missing entirely) the condition
 just doesn't match, the same as a `=` condition on a missing key.
 
+A condition can also gate on a percentage rollout with `rollout`:
+
+```
+flag beta-analytics {
+    default: off
+    rule: on if user_id rollout 25%
+}
+```
+
+This turns on for roughly 25% of the values seen for `user_id`. The
+bucket a given value falls into is stable for a given flag: the same
+`user_id` always lands in the same bucket for `beta-analytics`, but a
+different flag rolling out on `user_id` gets an independent split. The
+percentage has to be a number between 0 and 100, checked at parse time.
+
 ## Usage
 
 ```
@@ -109,5 +124,5 @@ cargo build --release
 
 ## Status
 
-Early. The grammar covers equality, inequality, and numeric comparisons
-joined with `and` / `or`, but not percentage rollouts yet.
+Early. The grammar covers equality, inequality, numeric comparisons, and
+percentage rollouts, joined with `and` / `or`.

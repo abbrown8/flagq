@@ -114,7 +114,7 @@ fn warn_on_unknown_keys(flag: &Flag, context: &HashMap<String, String>) {
 /// flag on" always comes with the "because" attached.
 fn evaluate(flag: &Flag, context: &HashMap<String, String>) -> (bool, String) {
     for (i, rule) in flag.rules.iter().enumerate() {
-        if rule_matches(rule, context) {
+        if rule_matches(&flag.name, rule, context) {
             let clause = describe_conditions(rule);
             return (
                 rule.effect,
@@ -128,13 +128,15 @@ fn evaluate(flag: &Flag, context: &HashMap<String, String>) -> (bool, String) {
     )
 }
 
-fn rule_matches(rule: &Rule, context: &HashMap<String, String>) -> bool {
-    rule.clauses
-        .iter()
-        .any(|group| group.iter().all(|cond| condition_matches(cond, context)))
+fn rule_matches(flag_name: &str, rule: &Rule, context: &HashMap<String, String>) -> bool {
+    rule.clauses.iter().any(|group| {
+        group
+            .iter()
+            .all(|cond| condition_matches(flag_name, cond, context))
+    })
 }
 
-fn condition_matches(cond: &Condition, context: &HashMap<String, String>) -> bool {
+fn condition_matches(flag_name: &str, cond: &Condition, context: &HashMap<String, String>) -> bool {
     match cond.op {
         Operator::Eq => context.get(&cond.key).map(|v| v == &cond.value).unwrap_or(false),
         Operator::NotEq => context.get(&cond.key).map(|v| v != &cond.value).unwrap_or(true),
@@ -150,14 +152,40 @@ fn condition_matches(cond: &Condition, context: &HashMap<String, String>) -> boo
                 Operator::Le => actual <= expected,
                 Operator::Gt => actual > expected,
                 Operator::Ge => actual >= expected,
-                Operator::Eq | Operator::NotEq => unreachable!(),
+                Operator::Eq | Operator::NotEq | Operator::Rollout => unreachable!(),
             }
+        }
+        Operator::Rollout => {
+            let Some(actual) = context.get(&cond.key) else {
+                return false;
+            };
+            let pct: f64 = cond.value.parse().expect("parser validated rollout percentage");
+            (rollout_bucket(flag_name, &cond.key, actual) as f64) < pct
         }
     }
 }
 
+/// Buckets a context value into [0, 100) so a rollout percentage can be
+/// compared against it. Salted with the flag name and key so the same
+/// context value doesn't land in the same bucket for every flag. Not
+/// cryptographic, just stable for the lifetime of one build: the same
+/// input always maps to the same bucket within a run.
+fn rollout_bucket(flag_name: &str, key: &str, value: &str) -> u32 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    flag_name.hash(&mut hasher);
+    key.hash(&mut hasher);
+    value.hash(&mut hasher);
+    (hasher.finish() % 100) as u32
+}
+
 fn describe_condition(c: &Condition) -> String {
-    format!("{} {} \"{}\"", c.key, c.op.symbol(), c.value)
+    match c.op {
+        Operator::Rollout => format!("{} rollout {}%", c.key, c.value),
+        _ => format!("{} {} \"{}\"", c.key, c.op.symbol(), c.value),
+    }
 }
 
 fn describe_conditions(rule: &Rule) -> String {

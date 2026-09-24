@@ -25,6 +25,7 @@ pub enum Operator {
     Le,
     Gt,
     Ge,
+    Rollout,
 }
 
 impl Operator {
@@ -36,6 +37,7 @@ impl Operator {
             Operator::Le => "<=",
             Operator::Gt => ">",
             Operator::Ge => ">=",
+            Operator::Rollout => "rollout",
         }
     }
 
@@ -153,19 +155,26 @@ impl Parser {
             TokenKind::Le => Operator::Le,
             TokenKind::Gt => Operator::Gt,
             TokenKind::Ge => Operator::Ge,
+            TokenKind::Ident(s) if s == "rollout" => Operator::Rollout,
             _ => {
                 let tok = self.peek();
                 return Err(SourceError::new(
                     tok.line,
                     tok.col,
                     format!(
-                        "expected `=`, `!=`, `<`, `<=`, `>` or `>=` after context key, found {}",
+                        "expected `=`, `!=`, `<`, `<=`, `>`, `>=` or `rollout` after context key, found {}",
                         tok.kind.describe()
                     ),
                 ));
             }
         };
         self.advance();
+
+        if op == Operator::Rollout {
+            let value = self.parse_percent()?;
+            return Ok(Condition { key, value, op });
+        }
+
         let value_tok = self.peek().clone();
         let value = self.parse_value()?;
         if op.is_numeric() && value.parse::<f64>().is_err() {
@@ -180,6 +189,39 @@ impl Parser {
             ));
         }
         Ok(Condition { key, value, op })
+    }
+
+    /// Parses a rollout percentage, e.g. `25%`, and stores it back as a
+    /// plain number string so `Condition::value` stays a single type
+    /// regardless of operator.
+    fn parse_percent(&mut self) -> Result<String, SourceError> {
+        let tok = self.advance();
+        let digits = match &tok.kind {
+            TokenKind::Ident(s) => s.clone(),
+            other => {
+                return Err(SourceError::new(
+                    tok.line,
+                    tok.col,
+                    format!("expected a rollout percentage, found {}", other.describe()),
+                ))
+            }
+        };
+        let pct: f64 = digits.parse().map_err(|_| {
+            SourceError::new(
+                tok.line,
+                tok.col,
+                format!("expected a number before `%`, found `{}`", digits),
+            )
+        })?;
+        self.expect(&TokenKind::Percent, "after rollout percentage")?;
+        if !(0.0..=100.0).contains(&pct) {
+            return Err(SourceError::new(
+                tok.line,
+                tok.col,
+                format!("rollout percentage must be between 0 and 100, found {}", pct),
+            ));
+        }
+        Ok(pct.to_string())
     }
 
     fn parse_and_group(&mut self) -> Result<Vec<Condition>, SourceError> {
